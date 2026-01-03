@@ -55,6 +55,9 @@ data_clean <- data_clean %>%
   distinct(pl_name, .keep_all = TRUE)
 ```
 
+- El archivo .rmd con el código utilizado para la limpieza, preparación y visualización del dataset se puede encontrar en el siguiente repositorio de Github: https://github.com/ltmateo/data_visualization_exoplanets 
+
+
 Imaginemos que queremos conocer qué planetas podrían tener condiciones similares a la Tierra. Este trabajo analiza los exoplanetas descubiertos hasta la fecha, revisando los sesgos de detección, clasificando los planetas según su tamaño y explorando criterios básicos de habitabilidad, como la temperatura y la insolación. La idea es combinar análisis visual y cuantitativo para entender mejor qué mundos son más frecuentes y cuáles podrían ser candidatos para estudios futuros.
 
 # 1 Sesgos de observación
