@@ -1,0 +1,465 @@
+---
+title: "Exploración de Exoplanetas y Habitabilidad"
+author: "Lucía Talavera"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width=7, fig.height=5)
+library(tidyverse)
+library(ggplot2)
+library(ggforce)
+library(gifski)
+library(patchwork)
+library(reshape2)
+library(plotly)
+library(dplyr)
+```
+
+```{r, include=FALSE}
+data <- read.csv("dataset_exoplanets.csv", sep=",")
+
+# Eliminar columnas que están casi completamente vacías (más de 80% NA)
+data_clean <- data %>%
+  select(where(~ mean(is.na(.)) < 0.8))
+
+# Eliminar observaciones (filas) que tengan NA en cualquier columna restante
+drop.cols <- c("sy_refname","st_refname", "pl_refname")
+
+data_clean <- data_clean %>%
+  drop_na() %>%
+  select(-one_of(drop.cols))
+
+
+keep.cols <- c(
+  "pl_name", "hostname", "discoverymethod", "disc_facility",
+  "sy_snum", "sy_pnum", "disc_year",
+  "pl_orbper", "pl_orbsmax", "pl_orbeccen",
+  "pl_rade", "pl_radj", "pl_insol", "pl_eqt",
+  "st_teff", "st_rad", "st_mass", "st_met", "st_logg",
+  "ra", "dec", "sy_dist",
+  "sy_vmag", "sy_kmag", "sy_gaiamag",
+  "rowupdate", "pl_pubdate")
+
+data_clean <- data_clean %>%
+  select(one_of(keep.cols))
+
+data_clean <- data_clean %>%
+  mutate(rowupdate = as.Date(rowupdate, format = "%d/%m/%y")) %>%
+  arrange(pl_name, desc(rowupdate)) %>%
+  distinct(pl_name, .keep_all = TRUE)
+```
+
+Imaginemos que queremos conocer qué planetas podrían tener condiciones similares a la Tierra. Este trabajo analiza los exoplanetas descubiertos hasta la fecha, revisando los sesgos de detección, clasificando los planetas según su tamaño y explorando criterios básicos de habitabilidad, como la temperatura y la insolación. La idea es combinar análisis visual y cuantitativo para entender mejor qué mundos son más frecuentes y cuáles podrían ser candidatos para estudios futuros.
+
+# 1 Sesgos de observación
+
+Este mapa interactivo muestra todos los exoplanetas descubiertos hasta ahora. Observa cómo los mundos se concentran donde los telescopios pueden ver, mientras que vastos vacíos permanecen inexplorados: la galaxia tiene secretos que aún no hemos revelado.
+
+```{r, echo=FALSE, fig.width = 8, fig.height = 6}
+data_map <- data_clean %>%
+  filter(!is.na(ra), !is.na(dec), !is.na(pl_rade))
+
+colors1 <- c("Transit" = "#151956", "Radial Velocity" = "#823194", "Orbital Brightness Modulation" = "#D8366D", "Transit Timing Variations" = "#6562EC")
+
+p <- ggplot(data_map, aes(x = ra, y = dec, color = discoverymethod, size = log(pl_rade + 1))) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = colors1) +
+  scale_size_continuous(range = c(1, 7), guide = "none") +  
+  theme_minimal() +
+  labs(x = "Right ascension", y = "Declination", color = "Discovery Method") +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 10),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 8))
+
+map <- ggplotly(p) %>%
+  layout(
+    legend = list(
+      orientation = "h",  
+      x = 0.5,
+      y = -0.2,
+      xanchor = "center",
+      yanchor = "top"))
+
+map
+```
+
+Primero, es importante entender que no todos los métodos de detección son iguales ni capturan los mismos tipos de planetas. 
+
+```{r, echo=FALSE, fig.width = 8, fig.height = 4}
+disc_counts <- data_clean %>%
+  count(discoverymethod)
+
+p <- ggplot(disc_counts, aes(x = discoverymethod,
+                             y = n,
+                             fill = discoverymethod,
+                             text = paste("Exoplanets:", n))) +
+geom_col() +
+theme_minimal() +
+labs(x = "Discovery method", y = "Number of exoplanets", fill = "Discovery method") +
+scale_fill_manual(values = colors1) +
+theme(legend.position = "none",
+      axis.text = element_text(size = 8),
+      axis.title = element_text(size = 10)) +
+coord_flip()
+
+ggplotly(p, tooltip = "text")
+```
+
+Misiones como Kepler y TESS han ampliado enormemente nuestra capacidad de descubrir exoplanetas, pero el método de tránsito domina claramente los registros, mientras que otros métodos detectan muchos menos planetas.
+
+```{r, echo=FALSE, fig.width = 12, fig.height = 6}
+colors2 <- c("Radial Velocity" = "#823194", "Orbital Brightness Modulation" = "#D8366D", "Transit Timing Variations" = "#6562EC") 
+
+p1 <- ggplot(data_clean, aes(x = disc_year, color = discoverymethod)) +
+geom_freqpoly(binwidth = 1, linewidth = 1.5) +
+theme_minimal() +
+labs(x = "Discovery year", y = "Number of exoplanets", color = "Discovery method") + 
+scale_color_manual(values = colors1) +
+theme(axis.text = element_text(size = 14),
+      axis.title = element_text(size = 16),
+      legend.text = element_text(size = 14),
+      legend.title = element_text(size = 16))
+
+p2 <- ggplot(data_clean[data_clean$discoverymethod!="Transit",], aes(x = disc_year, color = discoverymethod)) +
+geom_freqpoly(binwidth = 1, linewidth = 1.5) +
+theme_minimal() +
+labs(x = "Discovery year", y = "Number of exoplanets", color = "Discovery method") +
+theme(legend.position = "none",
+      axis.text = element_text(size = 14),
+      axis.title = element_text(size = 16)) +
+scale_color_manual(values = colors2)
+
+par(mfrow = c(1, 2))
+p1 + p2 
+par(mfrow = c(1,1))
+```
+
+Aunque el método de tránsito domina, cubre un amplio rango de tamaños de planeta, desde pequeños planetas tipo Tierras hasta gigantes gaseosos.
+
+```{r, echo=FALSE, fig.width = 12, fig.height = 6}
+ggplot(data_clean, aes(x = discoverymethod, y = pl_rade, fill = discoverymethod, alpha = 0.9)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(
+    x = "Discovery method",
+    y = "Planet radius (log)") + 
+  scale_fill_manual(values = colors1) +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16))
+```
+
+
+
+# 2 Clasificación conceptual
+
+A continuación, clasificamos los planetas según su tamaño: Tierras, Supertierras, Neptunos y Gigantes. Esta clasificación nos permite identificar patrones de descubrimiento y analizar qué tipos de planetas son más frecuentes en los datos actuales.
+
+```{r, echo=FALSE, fig.width = 12, fig.height = 4}
+data_clean <- data_clean %>%
+mutate(
+planet_type = case_when(
+pl_rade < 1.25 ~ "Earths",
+pl_rade < 2 ~ "Super Earths",
+pl_rade < 6 ~ "Neptunes",
+pl_rade >= 6 ~ "Giants",
+TRUE ~ NA_character_))
+
+data_clean$planet_type <- factor(data_clean$planet_type,
+levels = c("Earths", "Super Earths", "Neptunes", "Giants"))
+
+colors <- c("Earths" = "#E6BEEC", "Super Earths" = "#9B5293", "Neptunes" = "#603661", "Giants" = "#210E40") 
+
+p1 <- ggplot(data_clean, aes(x = planet_type, fill = planet_type)) +
+geom_bar() +
+theme_minimal() +
+labs(x = "", y = "Number of exoplanets", fill = "Type of planet") +
+scale_fill_manual(values = colors) +
+theme(axis.text = element_text(size = 14),
+      axis.title = element_text(size = 16),
+      legend.text = element_text(size = 14),
+      legend.title = element_text(size = 16))
+
+planet_counts <- data_clean %>%
+count(planet_type) %>%
+mutate(freq = n / sum(n))
+
+p2 <- planet_counts %>%
+ggplot(aes(x = planet_type, y = freq, fill = planet_type)) +
+geom_col() +
+scale_y_continuous(labels = scales::percent) +
+theme_minimal() +
+labs(x = "", y = "Percentage of total discoveries") +
+theme(legend.position = "none",
+      axis.text = element_text(size = 14),
+      axis.title = element_text(size = 16)) +
+scale_fill_manual(values = colors) 
+
+p1 + p2
+```
+
+Se observa que las Supertierras y los planetas tipo Neptuno son los más comunes, mientras que los planetas tipo Tierra y los gigantes gaseosos son menos frecuentes.
+
+La relación entre el tipo de estrella y el tipo de planeta nos ayuda a entender qué sistemas estelares tienden a albergar ciertos planetas. Introdujimos una variable que indicaba el tipo de estrella con la clasificación obtenida de https://es.wikipedia.org/wiki/Clasificaci%C3%B3n_estelar 
+
+```{r, echo=FALSE, fig.width = 12, fig.height = 4}
+data_clean <- data_clean %>%
+  mutate(
+    star_type = case_when(
+      st_teff < 3700 ~ "M",
+      st_teff < 5200 ~ "K",
+      st_teff < 6000 ~ "G",
+      st_teff < 7500 ~ "F",
+      st_teff < 10000 ~ "A",
+      st_teff < 33000 ~ "B",
+      st_teff >= 33000 ~ "O",
+      TRUE ~ NA_character_))
+
+data_clean$star_type <- factor(data_clean$star_type,
+                               levels = c("M", "K", "G", "F", "A", "B", "O"))
+
+colors3 <- c("Earths" = "#E6BEEC", "Super Earths" = "#9B5293", "Neptunes" = "#603661", "Giants" = "#210E40") 
+
+p1 <- ggplot(data_clean, aes(x = st_teff, y = pl_rade, color = planet_type)) +
+  geom_point(alpha = 0.7) +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(
+    x = "Star effective temperature (K)",
+    y = "Planet radius (log)",
+    color = "Type of planet") +
+  scale_color_manual(values = colors3) +
+  theme(axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.position = "none")
+
+p2 <- ggplot(data_clean, aes(x = star_type, fill = planet_type)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  labs(
+    x = "Star class",
+    y = "",
+    fill = "Type of planet") +
+  scale_fill_manual(values = colors3) +
+  theme(axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        legend.position = "left")
+
+p1 + p2
+```
+
+Al mirar las estrellas, vemos que las más frías (M y K) albergan planetas tipo Tierra y Supertierras, mientras que las más calientes contienen principalmente gigantes. Esta información es crucial para entender los desafíos de encontrar un planeta habitable: no se trata solo de buscar planetas, sino de buscarlos en los lugares correctos.
+
+```{r, echo=FALSE, fig.width = 8, fig.height = 3}
+star_counts <- data_clean %>%
+  count(star_type)
+
+star_colors <- c(
+  "O" = "#4B81E8",
+  "B" = "#69ABF6",
+  "A" = "#A2EEF3",
+  "F" = "#D2FBEF",
+  "G" = "#ECFDB2",
+  "K" = "#F5DA58",
+  "M" = "#E35527")
+
+p <- ggplot(
+  star_counts,
+  aes(
+    x = star_type,
+    y = 1,
+    size = n,
+    fill = star_type,
+    text = paste("Count:", n))) +
+  geom_point(shape = 21, color = "transparent") +
+  scale_size_area(max_size = 50) +
+  scale_fill_manual(values = star_colors) +
+  theme_minimal() +
+  labs(
+    title = "Distribution of host stars of discovered exoplanets",
+    x = "Star type",
+    y = NULL) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    title = element_text(size = 12),
+    legend.position = "none",
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 10))
+
+ggplotly(p, tooltip = "text")
+```
+
+
+# 3 Habitabilidad
+
+Para evaluar posibles planetas habitables, usamos dos criterios: temperatura y insolación. 
+
+- Con el criterio de temperatura, identificamos planetas cuyo equilibrio térmico se aproxima al de la Tierra. 
+
+- Con el criterio de insolación, consideramos planetas que reciben una cantidad de energía estelar similar a la terrestre.
+
+## 3.1 Criterio: temperatura
+
+```{r, echo=FALSE, fig.width = 12, fig.height = 6}
+earth_eqt_range <- c(240, 310)
+
+candidates_1 <- data_clean %>%
+filter(pl_eqt >= earth_eqt_range[1],
+pl_eqt <= earth_eqt_range[2]) %>%
+mutate(selection = "Temperature")
+
+ggplot(data_clean, aes(x = pl_insol, y = pl_eqt)) +
+  geom_point(alpha = 0.4, color = "#D29876") +
+  geom_vline(xintercept = earth_eqt_range, linetype = "dashed", color = "#96411B") +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(x = "Temperature (K)", y = "Planet radius",
+       title = "Planets with similar temperature to Earth") + 
+  theme(axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        title = element_text(size = 18))
+```
+
+## 3.2 Criterio: insolación
+
+```{r, echo=FALSE, fig.width = 12, fig.height = 6}
+earth_insol_range <- c(0.75, 1.5)
+
+ggplot(data_clean, aes(x = pl_insol, y = pl_rade)) +
+  geom_point(alpha = 0.4, color = "#D1B47C") +
+  geom_vline(xintercept = earth_insol_range, linetype = "dashed", color = "#96411B") +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(x = "Insolation (relative to Earth)", y = "Planet radius",
+     title = "Planets with similar insolation to Earth") + 
+  theme(axis.text = element_text(size = 14),
+        axis.title = element_text(size = 16),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 16),
+        title = element_text(size = 18))
+
+candidates_2 <- data_clean %>%
+filter(pl_insol >= earth_insol_range[1],
+pl_insol <= earth_insol_range[2]) %>%
+mutate(selection = "Insolation")
+```
+
+## 3.3 Planetas "habitables"
+
+Combinando ambos criterios, encontramos que solo 30 planetas cumplen simultáneamente ambas condiciones y muestra que el criterio de insolación es más estricto que el de temperatura.
+
+```{r, echo=FALSE}
+ids_1 <- candidates_1$pl_name
+ids_2 <- candidates_2$pl_name
+overlap <- length(intersect(ids_1, ids_2))
+```
+
+```{r, animation.hook="gifski", echo=FALSE}
+r_temp <- sqrt(length(ids_1)/pi)      
+r_insol <- sqrt(length(ids_2)/pi)     
+r_overlap <- sqrt(overlap/pi)
+
+max_display <- 2.5
+scale_factor <- max_display / max(r_temp, r_insol)
+
+r_temp <- r_temp * scale_factor
+r_insol <- r_insol * scale_factor
+r_overlap <- r_overlap * scale_factor
+
+x_temp <- r_temp
+x_insol_start <- x_temp + r_temp + r_insol + 0.5
+x_insol_final <- x_temp + r_temp + r_insol - 2 * r_overlap
+
+frames <- list(
+  data.frame(
+    x0 = c(x_temp, x_insol_start),
+    y0 = c(0, 0),
+    r  = c(r_temp, r_insol),
+    criteria = c("Temperature", "Insolation")),
+  data.frame(
+    x0 = c(x_temp, (x_insol_start + x_insol_final) / 2),
+    y0 = c(0, 0),
+    r  = c(r_temp, r_insol),
+    criteria = c("Temperature", "Insolation")),
+  data.frame(
+    x0 = c(x_temp, x_insol_final),
+    y0 = c(0, 0),
+    r  = c(r_temp, r_insol),
+    criteria = c("Temperature", "Insolation")))
+
+colors4 <- c("Temperature" = "#D29876", "Insolation"  = "#D1B47C")
+
+for (i in seq_along(frames)) {
+  f <- frames[[i]]
+
+  p <- ggplot(f) +
+    geom_circle(
+      aes(x0 = x0, y0 = y0, r = r, fill = criteria),
+      alpha = 0.5,
+      color = NA) +
+    scale_fill_manual(values = colors4) +
+    coord_fixed(
+      xlim = c(0, max_display * 4),
+      ylim = c(-max_display, max_display)) +
+    theme_void()
+
+  if (i == length(frames)) {
+    p <- p +
+      geom_text(
+        aes(x = (x_temp + x_insol_final) / 2, y = 0),
+        label = "30",
+        size = 8,
+        fontface = "bold")
+  }
+
+  print(p)
+}
+```
+
+```{r, echo=FALSE}
+cat("Número de planetas que cumplen las condiciones de temperatura:", length(ids_1), "\n")
+cat("Número de planetas que cumplen las condiciones de insolación:", length(ids_2), "\n")
+cat("Número de planetas que cumplen ambas:", overlap, "\n")
+```
+
+Finalmente, al analizar los 30 candidatos que cumplen ambos criterios, vemos que la mayoría son Supertierras o tipo Neptuno, y solo un exoplaneta, TOI-700 d, se ajusta más estrechamente a las condiciones de la Tierra según los datos disponibles. Esto evidencia lo difícil que es identificar mundos verdaderamente “habitables” y cómo los sesgos de detección influyen en nuestra percepción del universo.
+
+```{r, echo=FALSE}
+final_candidates <- data_clean %>%
+  filter(pl_name %in% intersect(ids_1, ids_2))
+
+final_counts <- final_candidates %>%
+  group_by(planet_type) %>%
+  summarise(planets = paste(pl_name, collapse = "<br>"),
+            n = n()) %>%
+  ungroup()
+
+fig <- plot_ly(final_counts, labels = ~planet_type, values = ~n, type = "pie",
+               textinfo = "label+percent",
+               hovertext = ~planets,
+               hoverinfo = "label+text",
+               showlegend = FALSE,
+               marker = list(colors = colors3[final_counts$planet_type])) %>%
+  layout(title = "Tipos de planetas entre los 30 candidatos finales")
+
+fig
+```
