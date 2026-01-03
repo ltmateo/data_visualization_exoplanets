@@ -59,7 +59,7 @@ Imaginemos que queremos conocer qué planetas podrían tener condiciones similar
 
 # 1 Sesgos de observación
 
-Este mapa interactivo muestra todos los exoplanetas descubiertos hasta ahora. Observa cómo los mundos se concentran donde los telescopios pueden ver, mientras que vastos vacíos permanecen inexplorados: la galaxia tiene secretos que aún no hemos revelado.
+Este mapa interactivo muestra todos los exoplanetas descubiertos hasta ahora. Observa cómo estos mundos se concentran en puntos donde nuestra tecnología nos permite "ver", mientras que existen vastos vacíos que aún permanecen inexplorados.
 
 ```{r, echo=FALSE, fig.width = 8, fig.height = 6}
 data_map <- data_clean %>%
@@ -72,12 +72,16 @@ p <- ggplot(data_map, aes(x = ra, y = dec, color = discoverymethod, size = log(p
   scale_color_manual(values = colors1) +
   scale_size_continuous(range = c(1, 7), guide = "none") +  
   theme_minimal() +
-  labs(x = "Right ascension", y = "Declination", color = "Discovery Method") +
+  labs(title = "Interactive map of discovered exoplanets", 
+       x = "Right ascension",
+       y = "Declination",
+       color = "Discovery Method") +
   theme(legend.position = "bottom",
         axis.text = element_text(size = 8),
         axis.title = element_text(size = 10),
         legend.title = element_text(size = 10),
-        legend.text = element_text(size = 8))
+        legend.text = element_text(size = 8),
+        title = element_text(size = 12))
 
 map <- ggplotly(p) %>%
   layout(
@@ -103,11 +107,15 @@ p <- ggplot(disc_counts, aes(x = discoverymethod,
                              text = paste("Exoplanets:", n))) +
 geom_col() +
 theme_minimal() +
-labs(x = "Discovery method", y = "Number of exoplanets", fill = "Discovery method") +
+labs(title = "Discovery methods",
+     x = "Discovery method",
+     y = "Number of exoplanets",
+     fill = "Discovery method") +
 scale_fill_manual(values = colors1) +
 theme(legend.position = "none",
       axis.text = element_text(size = 8),
-      axis.title = element_text(size = 10)) +
+      axis.title = element_text(size = 10),
+      title = element_text(size = 12)) +
 coord_flip()
 
 ggplotly(p, tooltip = "text")
@@ -121,7 +129,9 @@ colors2 <- c("Radial Velocity" = "#823194", "Orbital Brightness Modulation" = "#
 p1 <- ggplot(data_clean, aes(x = disc_year, color = discoverymethod)) +
 geom_freqpoly(binwidth = 1, linewidth = 1.5) +
 theme_minimal() +
-labs(x = "Discovery year", y = "Number of exoplanets", color = "Discovery method") + 
+labs(x = "Discovery year",
+     y = "Number of exoplanets",
+     color = "Discovery method") + 
 scale_color_manual(values = colors1) +
 theme(axis.text = element_text(size = 14),
       axis.title = element_text(size = 16),
@@ -149,13 +159,14 @@ ggplot(data_clean, aes(x = discoverymethod, y = pl_rade, fill = discoverymethod,
   geom_boxplot() +
   scale_y_log10() +
   theme_minimal() +
-  labs(
-    x = "Discovery method",
-    y = "Planet radius (log)") + 
+  labs(title = "Distribution of exoplanet sizes by discovery method",
+       x = "Discovery method",
+       y = "Planet radius (log)") + 
   scale_fill_manual(values = colors1) +
   theme(legend.position = "none",
         axis.text = element_text(size = 14),
-        axis.title = element_text(size = 16))
+        axis.title = element_text(size = 16),
+        title = element_text(size = 18))
 ```
 
 
